@@ -1,0 +1,24 @@
+{
+  "originHash" : "c9cc0147ab6502acb3a8eefdc8f3caea8428bddef062e34183b35e40909f3f6a",
+  "pins" : [
+    {
+      "identity" : "primitives",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/leviouwendijk/Primitives.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "3a899c26f691807ef4c36370d364698a64c99e77"
+      }
+    },
+    {
+      "identity" : "registry",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/leviouwendijk/Registry.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "49966bb43475aae8231356853a2f1303d95346eb"
+      }
+    }
+  ],
+  "version" : 3
+}
