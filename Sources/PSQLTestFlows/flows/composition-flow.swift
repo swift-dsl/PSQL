@@ -120,7 +120,7 @@ extension PSQLFlowSuite {
                             "i.indkey"
                         ),
                         PSQL.Ident.column(
-                            "slot.generate_subscripts"
+                            "slot.subscript"
                         )
                     )
 
@@ -128,7 +128,7 @@ extension PSQLFlowSuite {
                     expression.render(
                         &context
                     ),
-                    "\"i\".\"indkey\"[\"slot\".\"generate_subscripts\"]",
+                    "\"i\".\"indkey\"[\"slot\".\"subscript\"]",
                     "composition.array-element.sql"
                 )
 
@@ -203,6 +203,47 @@ extension PSQLFlowSuite {
                     AS "slot"
                     """,
                     "composition.lateral-cross-join"
+                )
+            }
+
+            Step("FROM function supports explicit column alias") {
+                let rendered = PSQL.Select(
+                    [
+                        PSQL.Ident.column(
+                            "slot.subscript"
+                        )
+                    ],
+                    from: PSQL.func_(
+                        "pg_catalog.generate_subscripts",
+                        [
+                            PSQL.Ident.column(
+                                "source.values"
+                            ),
+                            PSQL.integer(1),
+                        ]
+                    ),
+                    as: "slot",
+                    columns: [
+                        "subscript"
+                    ]
+                )
+                .build()
+
+                try Expect.contains(
+                    rendered.sql,
+                    """
+                    pg_catalog.generate_subscripts("source"."values", 1) \
+                    AS "slot"("subscript")
+                    """,
+                    "composition.function-source.column-alias"
+                )
+
+                try Expect.contains(
+                    rendered.sql,
+                    """
+                    SELECT "slot"."subscript"
+                    """,
+                    "composition.function-source.column-reference"
                 )
             }
 

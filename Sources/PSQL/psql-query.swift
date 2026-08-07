@@ -10,6 +10,7 @@ extension PSQL {
         public let table: String
         public let fromSource: (any SQLRenderable)?
         public let fromAlias: Ident?
+        public let fromAliasColumns: [Ident]
 
         public var joins: [Join] = []
         public var predicate: (any SQLRenderable)?
@@ -45,17 +46,22 @@ extension PSQL {
             self.fromAlias = alias.map(
                 Ident.alias
             )
+            self.fromAliasColumns = []
         }
 
         public init(
             _ columns: [any SQLRenderable],
             from source: any SQLRenderable,
-            as alias: String
+            as alias: String,
+            columns aliasColumns: [String] = []
         ) {
             self.columns = columns
             self.table = ""
             self.fromSource = source
             self.fromAlias = .alias(alias)
+            self.fromAliasColumns = aliasColumns.map(
+                Ident.alias
+            )
         }
 
         public static func make(
@@ -73,12 +79,14 @@ extension PSQL {
         public static func make(
             _ columns: [any SQLRenderable],
             from source: any SQLRenderable,
-            as alias: String
+            as alias: String,
+            columns aliasColumns: [String] = []
         ) -> Select {
             .init(
                 columns,
                 from: source,
-                as: alias
+                as: alias,
+                columns: aliasColumns
             )
         }
 
@@ -314,9 +322,25 @@ extension PSQL {
             }
 
             if let fromAlias {
+                let aliasColumns: String
+
+                if fromAliasColumns.isEmpty {
+                    aliasColumns = ""
+                } else {
+                    aliasColumns =
+                        "("
+                        + fromAliasColumns
+                            .map {
+                                $0.render(&ctx)
+                            }
+                            .joined(separator: ", ")
+                        + ")"
+                }
+
                 parts.append(
                     "FROM \(base) AS "
                     + fromAlias.render(&ctx)
+                    + aliasColumns
                 )
             } else {
                 parts.append(
