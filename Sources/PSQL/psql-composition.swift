@@ -330,6 +330,57 @@ extension PSQL {
             )
         )
     }
+
+    public struct Parenthesized: SQLRenderable {
+        public let expression: any SQLRenderable
+
+        public init(
+            _ expression: any SQLRenderable
+        ) {
+            self.expression = expression
+        }
+
+        public func render(
+            _ ctx: inout SQLRenderContext
+        ) -> String {
+            "(\(expression.render(&ctx)))"
+        }
+    }
+
+    public static func parenthesized(
+        _ expression: any SQLRenderable
+    ) -> Parenthesized {
+        .init(expression)
+    }
+
+    public struct ArrayElement: SQLRenderable {
+        public let array: any SQLRenderable
+        public let index: any SQLRenderable
+
+        public init(
+            _ array: any SQLRenderable,
+            _ index: any SQLRenderable
+        ) {
+            self.array = array
+            self.index = index
+        }
+
+        public func render(
+            _ ctx: inout SQLRenderContext
+        ) -> String {
+            "\(array.render(&ctx))[\(index.render(&ctx))]"
+        }
+    }
+
+    public static func arrayElement(
+        _ array: any SQLRenderable,
+        _ index: any SQLRenderable
+    ) -> ArrayElement {
+        .init(
+            array,
+            index
+        )
+    }
 }
 
 extension PSQL.Cast {

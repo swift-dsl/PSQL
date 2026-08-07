@@ -192,8 +192,30 @@ extension PSQL {
         .bin(l, "IN", sub)
     }
 
-    public static func any(_ l: any SQLRenderable, _ arrParam: Param) -> Op { .bin(l, "= ANY", arrParam) }
-    public static func all(_ l: any SQLRenderable, _ arrParam: Param) -> Op { .bin(l, "= ALL", arrParam) }
+    // public static func any(_ l: any SQLRenderable, _ arrParam: Param) -> Op { .bin(l, "= ANY", arrParam) }
+    // public static func all(_ l: any SQLRenderable, _ arrParam: Param) -> Op { .bin(l, "= ALL", arrParam) }
+
+    public static func any(
+        _ left: any SQLRenderable,
+        _ array: any SQLRenderable
+    ) -> Op {
+        .bin(
+            left,
+            "= ANY",
+            parenthesized(array)
+        )
+    }
+
+    public static func all(
+        _ left: any SQLRenderable,
+        _ array: any SQLRenderable
+    ) -> Op {
+        .bin(
+            left,
+            "= ALL",
+            parenthesized(array)
+        )
+    }
 
     /// Renders `l BETWEEN a AND b` safely in the *same* context.
     public struct BetweenPair: SQLRenderable {
