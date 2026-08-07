@@ -27,9 +27,5 @@ let package = Package(
                 // .product(name: "Indentation", package: "Indentation"),
             ],
         ),
-        .testTarget(
-            name: "PSQLTests",
-            dependencies: ["PSQL"]
-        ),
     ]
 )

@@ -8,7 +8,9 @@ extension PSQL {
     public struct Select: SQLQuery {
         public let columns: [any SQLRenderable]
         public let table: String
+        public let fromSource: (any SQLRenderable)?
         public let fromAlias: Ident?
+
         public var joins: [Join] = []
         public var predicate: (any SQLRenderable)?
         public var group: [any SQLRenderable] = []
@@ -16,164 +18,556 @@ extension PSQL {
         public var limitValue: Int?
         public var offsetValue: Int?
         public var distinct: Bool = false
-        public var ctes: [(String, Select)] = []
+
+        public var ctes: [
+            (
+                String,
+                Select
+            )
+        ] = []
+
+        public var commonTableExpressions:
+            [CommonTableExpression] = []
+
+        public var havingPredicate:
+            (any SQLRenderable)?
+
         public var forUpdate: Bool = false
 
-        // public init(_ cols: [any SQLRenderable], from table: String) {
-        //     self.columns = cols; self.table = table
-        // }
-        public init(_ cols: [any SQLRenderable], from table: String, as alias: String? = nil) {
-            self.columns = cols
+        public init(
+            _ columns: [any SQLRenderable],
+            from table: String,
+            as alias: String? = nil
+        ) {
+            self.columns = columns
             self.table = table
-            self.fromAlias = alias.map(Ident.alias)
+            self.fromSource = nil
+            self.fromAlias = alias.map(
+                Ident.alias
+            )
         }
 
-        // public static func make(_ cols: [any SQLRenderable], from table: String) -> Select {
-        //     // .init(cols, from: table)
-        //     .init(cols, from: table, as: nil)
-        // }
+        public init(
+            _ columns: [any SQLRenderable],
+            from source: any SQLRenderable,
+            as alias: String
+        ) {
+            self.columns = columns
+            self.table = ""
+            self.fromSource = source
+            self.fromAlias = .alias(alias)
+        }
+
         public static func make(
-            _ cols: [any SQLRenderable],
+            _ columns: [any SQLRenderable],
             from table: String,
             as alias: String
         ) -> Select {
-            .init(cols, from: table, as: alias)
+            .init(
+                columns,
+                from: table,
+                as: alias
+            )
         }
 
-        public func with(_ name: String, as sel: Select) -> Select { var c = self; c.ctes.append((name, sel)); return c }
-        public func `where`(@BoolExprBuilder _ b: () -> [any SQLRenderable]) -> Select { var c = self; c.predicate = Op.group(b()); return c }
-        public func join(_ j: Join) -> Select { var c = self; c.joins.append(j); return c }
-
-        public func orderBy(_ items: [any SQLRenderable]) -> Select { var c = self; c.order = items; return c }
-        public func orderBy(_ items: any SQLRenderable...) -> Select { orderBy(items) }
-        public func orderByIdent(_ items: PSQL.Order...) -> Select {
-            orderBy(items as [any SQLRenderable])
+        public static func make(
+            _ columns: [any SQLRenderable],
+            from source: any SQLRenderable,
+            as alias: String
+        ) -> Select {
+            .init(
+                columns,
+                from: source,
+                as: alias
+            )
         }
 
-        public func groupBy(_ items: [any SQLRenderable]) -> Select { var c = self; c.group = items; return c }
-        public func groupBy(_ items: any SQLRenderable...) -> Select { groupBy(items) }
+        public func with(
+            _ name: String,
+            as select: Select
+        ) -> Select {
+            var copy = self
 
-        public func limit(_ n: Int) -> Select { var c = self; c.limitValue = n; return c }
-        public func offset(_ n: Int) -> Select { var c = self; c.offsetValue = n; return c }
-        public func distinct(_ d: Bool = true) -> Select { var c = self; c.distinct = d; return c }
-        public func lockForUpdate(_ yes: Bool = true) -> Select { var c = self; c.forUpdate = yes; return c }
+            copy.ctes.append(
+                (
+                    name,
+                    select
+                )
+            )
 
-        // public func render(_ ctx: inout SQLRenderContext) -> String {
-        //     var parts: [String] = []
-        //     if !ctes.isEmpty {
-        //         let cteSQL = ctes.map { name, sel -> String in
-        //             var c = SQLRenderContext(); let s = sel.render(&c)
-        //             ctx.binds.append(contentsOf: c.binds)
-        //             return #""\#(name)" AS (\#(s))"#
-        //         }.joined(separator: ", ")
-        //         parts.append("WITH \(cteSQL)")
-        //     }
-        //     parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
-        //     // parts.append("FROM \"\(table)\"")
-        //     if let a = fromAlias {
-        //         parts.append("FROM \"\(table)\" AS \(a.render(&ctx))")
-        //     } else {
-        //         parts.append("FROM \"\(table)\"")
-        //     }
-        //     if !joins.isEmpty { parts.append(joins.map { $0.render(&ctx) }.joined(separator: " ")) }
-        //     if let p = predicate { parts.append("WHERE \(p.render(&ctx))") }
-        //     if !group.isEmpty { parts.append(" GROUP BY \(group.joined(", ", &ctx))") }
-        //     if !order.isEmpty { parts.append("ORDER BY " + order.joined(", ", &ctx)) }
-        //     if let l = limitValue { parts.append("LIMIT \(l)") }
-        //     if let o = offsetValue { parts.append("OFFSET \(o)") }
-        //     if forUpdate { parts.append("FOR UPDATE") }
-        //     return parts.joined(separator: " ")
-        // }
+            return copy
+        }
 
-        // public func render(_ ctx: inout SQLRenderContext) -> String {
-        //     var parts: [String] = []
+        public func with(
+            _ cte: CommonTableExpression
+        ) -> Select {
+            var copy = self
+            copy.commonTableExpressions.append(cte)
+            return copy
+        }
 
-        //     // WITH …
-        //     if !ctes.isEmpty {
-        //         let cteSQL = ctes.map { name, sel -> String in
-        //             var c = SQLRenderContext()
-        //             let s = sel.render(&c)
-        //             ctx.binds.append(contentsOf: c.binds)
-        //             return #""\#(name)" AS (\#(s))"#
-        //         }.joined(separator: ", ")
-        //         parts.append("WITH \(cteSQL)")
-        //     }
+        public func with(
+            _ name: String,
+            columns: [String] = [],
+            as query: any SQLRenderable,
+            materialization:
+                CTEMaterialization = .unspecified
+        ) -> Select {
+            with(
+                .init(
+                    name,
+                    columns: columns,
+                    query: query,
+                    materialization: materialization
+                )
+            )
+        }
 
-        //     // SELECT …
-        //     parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
+        public func withRecursive(
+            _ name: String,
+            columns: [String] = [],
+            as query: any SQLRenderable,
+            materialization:
+                CTEMaterialization = .unspecified
+        ) -> Select {
+            with(
+                .init(
+                    name,
+                    columns: columns,
+                    query: query,
+                    recursive: true,
+                    materialization: materialization
+                )
+            )
+        }
 
-        //     // FROM …  (schema-safe)
-        //     let from = Ident.table(table).render(&ctx)
-        //     if let a = fromAlias {
-        //         parts.append("FROM \(from) AS \(a.render(&ctx))")
-        //     } else {
-        //         parts.append("FROM \(from)")
-        //     }
+        public func `where`(
+            @BoolExprBuilder
+            _ builder: () -> [any SQLRenderable]
+        ) -> Select {
+            var copy = self
+            copy.predicate = Op.group(builder())
+            return copy
+        }
 
-        //     // JOIN …
-        //     if !joins.isEmpty {
-        //         parts.append(joins.map { $0.render(&ctx) }.joined(separator: " "))
-        //     }
+        public func `where`(
+            _ predicate: any SQLRenderable
+        ) -> Select {
+            var copy = self
+            copy.predicate = predicate
+            return copy
+        }
 
-        //     // WHERE …
-        //     if let p = predicate {
-        //         parts.append("WHERE \(p.render(&ctx))")
-        //     }
+        public func having(
+            @BoolExprBuilder
+            _ builder: () -> [any SQLRenderable]
+        ) -> Select {
+            var copy = self
+            copy.havingPredicate = Op.group(
+                builder()
+            )
+            return copy
+        }
 
-        //     // GROUP BY …
-        //     if !group.isEmpty {
-        //         parts.append(" GROUP BY \(group.joined(", ", &ctx))")
-        //     }
+        public func having(
+            _ predicate: any SQLRenderable
+        ) -> Select {
+            var copy = self
+            copy.havingPredicate = predicate
+            return copy
+        }
 
-        //     // ORDER BY …
-        //     if !order.isEmpty {
-        //         parts.append("ORDER BY " + order.joined(", ", &ctx))
-        //     }
+        public func join(
+            _ join: Join
+        ) -> Select {
+            var copy = self
+            copy.joins.append(join)
+            return copy
+        }
 
-        //     // LIMIT/OFFSET/LOCK
-        //     if let l = limitValue { parts.append("LIMIT \(l)") }
-        //     if let o = offsetValue { parts.append("OFFSET \(o)") }
-        //     if forUpdate { parts.append("FOR UPDATE") }
+        public func orderBy(
+            _ items: [any SQLRenderable]
+        ) -> Select {
+            var copy = self
+            copy.order = items
+            return copy
+        }
 
-        //     return parts.joined(separator: " ")
-        // }
+        public func orderBy(
+            _ items: any SQLRenderable...
+        ) -> Select {
+            orderBy(items)
+        }
 
-        public func render(_ ctx: inout SQLRenderContext) -> String {
+        public func orderByIdent(
+            _ items: PSQL.Order...
+        ) -> Select {
+            orderBy(
+                items as [any SQLRenderable]
+            )
+        }
+
+        public func groupBy(
+            _ items: [any SQLRenderable]
+        ) -> Select {
+            var copy = self
+            copy.group = items
+            return copy
+        }
+
+        public func groupBy(
+            _ items: any SQLRenderable...
+        ) -> Select {
+            groupBy(items)
+        }
+
+        public func limit(
+            _ value: Int
+        ) -> Select {
+            var copy = self
+            copy.limitValue = value
+            return copy
+        }
+
+        public func offset(
+            _ value: Int
+        ) -> Select {
+            var copy = self
+            copy.offsetValue = value
+            return copy
+        }
+
+        public func distinct(
+            _ value: Bool = true
+        ) -> Select {
+            var copy = self
+            copy.distinct = value
+            return copy
+        }
+
+        public func lockForUpdate(
+            _ value: Bool = true
+        ) -> Select {
+            var copy = self
+            copy.forUpdate = value
+            return copy
+        }
+
+        public func render(
+            _ ctx: inout SQLRenderContext
+        ) -> String {
             var parts: [String] = []
-            if !ctes.isEmpty {
-                let cteSQL = ctes.map { name, sel -> String in
-                    var c = SQLRenderContext(); let s = sel.render(&c)
-                    ctx.binds.append(contentsOf: c.binds)
-                    return #""\#(name)" AS (\#(s))"#
-                }.joined(separator: ", ")
-                parts.append("WITH \(cteSQL)")
+
+            if !ctes.isEmpty
+                || !commonTableExpressions.isEmpty
+            {
+                var renderedCTEs: [String] = []
+
+                for (name, select) in ctes {
+                    let identifier = Ident
+                        .alias(name)
+                        .render(&ctx)
+
+                    renderedCTEs.append(
+                        "\(identifier) AS "
+                        + "(\(select.render(&ctx)))"
+                    )
+                }
+
+                renderedCTEs.append(
+                    contentsOf:
+                        commonTableExpressions.map {
+                            $0.render(&ctx)
+                        }
+                )
+
+                let recursive =
+                    commonTableExpressions.contains {
+                        $0.recursive
+                    }
+
+                parts.append(
+                    "\(recursive ? "WITH RECURSIVE" : "WITH") "
+                    + renderedCTEs.joined(
+                        separator: ", "
+                    )
+                )
             }
 
-            parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
+            parts.append(
+                "SELECT "
+                + "\(distinct ? "DISTINCT " : "")"
+                + columns.joined(
+                    ", ",
+                    &ctx
+                )
+            )
 
-            let base = Ident.table(table).render(&ctx)
-            if let a = fromAlias {
-                parts.append("FROM \(base) AS \(a.render(&ctx))")
+            let base: String
+
+            if let fromSource {
+                base = fromSource.render(&ctx)
             } else {
-                parts.append("FROM \(base)")
+                base = Ident
+                    .table(table)
+                    .render(&ctx)
             }
 
-            if !joins.isEmpty { parts.append(joins.map { $0.render(&ctx) }.joined(separator: " ")) }
-            if let p = predicate { parts.append("WHERE \(p.render(&ctx))") }
-            if !group.isEmpty { parts.append(" GROUP BY \(group.joined(", ", &ctx))") }
-            if !order.isEmpty { parts.append("ORDER BY " + order.joined(", ", &ctx)) }
-            if let l = limitValue { parts.append("LIMIT \(l)") }
-            if let o = offsetValue { parts.append("OFFSET \(o)") }
-            if forUpdate { parts.append("FOR UPDATE") }
-            return parts.joined(separator: " ")
+            if let fromAlias {
+                parts.append(
+                    "FROM \(base) AS "
+                    + fromAlias.render(&ctx)
+                )
+            } else {
+                parts.append(
+                    "FROM \(base)"
+                )
+            }
+
+            if !joins.isEmpty {
+                parts.append(
+                    joins.map {
+                        $0.render(&ctx)
+                    }
+                    .joined(separator: " ")
+                )
+            }
+
+            if let predicate {
+                parts.append(
+                    "WHERE \(predicate.render(&ctx))"
+                )
+            }
+
+            if !group.isEmpty {
+                parts.append(
+                    "GROUP BY "
+                    + group.joined(
+                        ", ",
+                        &ctx
+                    )
+                )
+            }
+
+            if let havingPredicate {
+                parts.append(
+                    "HAVING "
+                    + havingPredicate.render(&ctx)
+                )
+            }
+
+            if !order.isEmpty {
+                parts.append(
+                    "ORDER BY "
+                    + order.joined(
+                        ", ",
+                        &ctx
+                    )
+                )
+            }
+
+            if let limitValue {
+                parts.append(
+                    "LIMIT \(limitValue)"
+                )
+            }
+
+            if let offsetValue {
+                parts.append(
+                    "OFFSET \(offsetValue)"
+                )
+            }
+
+            if forUpdate {
+                parts.append(
+                    "FOR UPDATE"
+                )
+            }
+
+            return parts.joined(
+                separator: " "
+            )
         }
 
         public func build() -> RenderedSQL {
-            var c = SQLRenderContext()
-            let s = render(&c)
-            return .init(s, c.binds)
+            var context = SQLRenderContext()
+
+            return .init(
+                render(&context),
+                context.binds
+            )
         }
     }
+
+    // public struct Select: SQLQuery {
+    //     public let columns: [any SQLRenderable]
+    //     public let table: String
+    //     public let fromAlias: Ident?
+    //     public var joins: [Join] = []
+    //     public var predicate: (any SQLRenderable)?
+    //     public var group: [any SQLRenderable] = []
+    //     public var order: [any SQLRenderable] = []
+    //     public var limitValue: Int?
+    //     public var offsetValue: Int?
+    //     public var distinct: Bool = false
+    //     public var ctes: [(String, Select)] = []
+    //     public var forUpdate: Bool = false
+
+    //     // public init(_ cols: [any SQLRenderable], from table: String) {
+    //     //     self.columns = cols; self.table = table
+    //     // }
+    //     public init(_ cols: [any SQLRenderable], from table: String, as alias: String? = nil) {
+    //         self.columns = cols
+    //         self.table = table
+    //         self.fromAlias = alias.map(Ident.alias)
+    //     }
+
+    //     // public static func make(_ cols: [any SQLRenderable], from table: String) -> Select {
+    //     //     // .init(cols, from: table)
+    //     //     .init(cols, from: table, as: nil)
+    //     // }
+    //     public static func make(
+    //         _ cols: [any SQLRenderable],
+    //         from table: String,
+    //         as alias: String
+    //     ) -> Select {
+    //         .init(cols, from: table, as: alias)
+    //     }
+
+    //     public func with(_ name: String, as sel: Select) -> Select { var c = self; c.ctes.append((name, sel)); return c }
+    //     public func `where`(@BoolExprBuilder _ b: () -> [any SQLRenderable]) -> Select { var c = self; c.predicate = Op.group(b()); return c }
+    //     public func join(_ j: Join) -> Select { var c = self; c.joins.append(j); return c }
+
+    //     public func orderBy(_ items: [any SQLRenderable]) -> Select { var c = self; c.order = items; return c }
+    //     public func orderBy(_ items: any SQLRenderable...) -> Select { orderBy(items) }
+    //     public func orderByIdent(_ items: PSQL.Order...) -> Select {
+    //         orderBy(items as [any SQLRenderable])
+    //     }
+
+    //     public func groupBy(_ items: [any SQLRenderable]) -> Select { var c = self; c.group = items; return c }
+    //     public func groupBy(_ items: any SQLRenderable...) -> Select { groupBy(items) }
+
+    //     public func limit(_ n: Int) -> Select { var c = self; c.limitValue = n; return c }
+    //     public func offset(_ n: Int) -> Select { var c = self; c.offsetValue = n; return c }
+    //     public func distinct(_ d: Bool = true) -> Select { var c = self; c.distinct = d; return c }
+    //     public func lockForUpdate(_ yes: Bool = true) -> Select { var c = self; c.forUpdate = yes; return c }
+
+    //     // public func render(_ ctx: inout SQLRenderContext) -> String {
+    //     //     var parts: [String] = []
+    //     //     if !ctes.isEmpty {
+    //     //         let cteSQL = ctes.map { name, sel -> String in
+    //     //             var c = SQLRenderContext(); let s = sel.render(&c)
+    //     //             ctx.binds.append(contentsOf: c.binds)
+    //     //             return #""\#(name)" AS (\#(s))"#
+    //     //         }.joined(separator: ", ")
+    //     //         parts.append("WITH \(cteSQL)")
+    //     //     }
+    //     //     parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
+    //     //     // parts.append("FROM \"\(table)\"")
+    //     //     if let a = fromAlias {
+    //     //         parts.append("FROM \"\(table)\" AS \(a.render(&ctx))")
+    //     //     } else {
+    //     //         parts.append("FROM \"\(table)\"")
+    //     //     }
+    //     //     if !joins.isEmpty { parts.append(joins.map { $0.render(&ctx) }.joined(separator: " ")) }
+    //     //     if let p = predicate { parts.append("WHERE \(p.render(&ctx))") }
+    //     //     if !group.isEmpty { parts.append(" GROUP BY \(group.joined(", ", &ctx))") }
+    //     //     if !order.isEmpty { parts.append("ORDER BY " + order.joined(", ", &ctx)) }
+    //     //     if let l = limitValue { parts.append("LIMIT \(l)") }
+    //     //     if let o = offsetValue { parts.append("OFFSET \(o)") }
+    //     //     if forUpdate { parts.append("FOR UPDATE") }
+    //     //     return parts.joined(separator: " ")
+    //     // }
+
+    //     // public func render(_ ctx: inout SQLRenderContext) -> String {
+    //     //     var parts: [String] = []
+
+    //     //     // WITH …
+    //     //     if !ctes.isEmpty {
+    //     //         let cteSQL = ctes.map { name, sel -> String in
+    //     //             var c = SQLRenderContext()
+    //     //             let s = sel.render(&c)
+    //     //             ctx.binds.append(contentsOf: c.binds)
+    //     //             return #""\#(name)" AS (\#(s))"#
+    //     //         }.joined(separator: ", ")
+    //     //         parts.append("WITH \(cteSQL)")
+    //     //     }
+
+    //     //     // SELECT …
+    //     //     parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
+
+    //     //     // FROM …  (schema-safe)
+    //     //     let from = Ident.table(table).render(&ctx)
+    //     //     if let a = fromAlias {
+    //     //         parts.append("FROM \(from) AS \(a.render(&ctx))")
+    //     //     } else {
+    //     //         parts.append("FROM \(from)")
+    //     //     }
+
+    //     //     // JOIN …
+    //     //     if !joins.isEmpty {
+    //     //         parts.append(joins.map { $0.render(&ctx) }.joined(separator: " "))
+    //     //     }
+
+    //     //     // WHERE …
+    //     //     if let p = predicate {
+    //     //         parts.append("WHERE \(p.render(&ctx))")
+    //     //     }
+
+    //     //     // GROUP BY …
+    //     //     if !group.isEmpty {
+    //     //         parts.append(" GROUP BY \(group.joined(", ", &ctx))")
+    //     //     }
+
+    //     //     // ORDER BY …
+    //     //     if !order.isEmpty {
+    //     //         parts.append("ORDER BY " + order.joined(", ", &ctx))
+    //     //     }
+
+    //     //     // LIMIT/OFFSET/LOCK
+    //     //     if let l = limitValue { parts.append("LIMIT \(l)") }
+    //     //     if let o = offsetValue { parts.append("OFFSET \(o)") }
+    //     //     if forUpdate { parts.append("FOR UPDATE") }
+
+    //     //     return parts.joined(separator: " ")
+    //     // }
+
+    //     public func render(_ ctx: inout SQLRenderContext) -> String {
+    //         var parts: [String] = []
+    //         if !ctes.isEmpty {
+    //             let cteSQL = ctes.map { name, sel -> String in
+    //                 var c = SQLRenderContext(); let s = sel.render(&c)
+    //                 ctx.binds.append(contentsOf: c.binds)
+    //                 return #""\#(name)" AS (\#(s))"#
+    //             }.joined(separator: ", ")
+    //             parts.append("WITH \(cteSQL)")
+    //         }
+
+    //         parts.append("SELECT \(distinct ? "DISTINCT " : "")\(columns.joined(", ", &ctx))")
+
+    //         let base = Ident.table(table).render(&ctx)
+    //         if let a = fromAlias {
+    //             parts.append("FROM \(base) AS \(a.render(&ctx))")
+    //         } else {
+    //             parts.append("FROM \(base)")
+    //         }
+
+    //         if !joins.isEmpty { parts.append(joins.map { $0.render(&ctx) }.joined(separator: " ")) }
+    //         if let p = predicate { parts.append("WHERE \(p.render(&ctx))") }
+    //         if !group.isEmpty { parts.append(" GROUP BY \(group.joined(", ", &ctx))") }
+    //         if !order.isEmpty { parts.append("ORDER BY " + order.joined(", ", &ctx)) }
+    //         if let l = limitValue { parts.append("LIMIT \(l)") }
+    //         if let o = offsetValue { parts.append("OFFSET \(o)") }
+    //         if forUpdate { parts.append("FOR UPDATE") }
+    //         return parts.joined(separator: " ")
+    //     }
+
+    //     public func build() -> RenderedSQL {
+    //         var c = SQLRenderContext()
+    //         let s = render(&c)
+    //         return .init(s, c.binds)
+    //     }
+    // }
 
     public struct Insert: SQLQuery {
         public let table: String
