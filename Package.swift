@@ -14,22 +14,11 @@ let package = Package(
             name: "PSQL",
             targets: ["PSQL"]
         ),
-        .executable(
-            name: "psqltest",
-            targets: [
-                "PSQLTestFlows",
-            ]
-        ),
     ],
 
     dependencies: [
         .package(url: "https://github.com/leviouwendijk/Primitives.git", branch: "master"),
         .package(url: "https://github.com/leviouwendijk/Registry.git", branch: "master"),
-        // .package(url: "https://github.com/leviouwendijk/Indentation.git", branch: "master"),
-        .package(
-            url: "https://github.com/leviouwendijk/TestFlows.git",
-            branch: "master"
-        ),
     ],
     targets: [
         .target(
@@ -39,16 +28,6 @@ let package = Package(
                 .product(name: "Registry", package: "Registry"),
                 // .product(name: "Indentation", package: "Indentation"),
             ],
-        ),
-        .executableTarget(
-            name: "PSQLTestFlows",
-            dependencies: [
-                "PSQL",
-                .product(
-                    name: "TestFlows",
-                    package: "TestFlows"
-                ),
-            ]
         ),
     ]
 )
