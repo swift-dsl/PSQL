@@ -17,8 +17,8 @@ let package = Package(
     ],
 
     dependencies: [
-        .package(url: "https://github.com/leviouwendijk/Primitives.git", branch: "master"),
-        .package(url: "https://github.com/leviouwendijk/Registry.git", branch: "master"),
+        .package(url: "https://github.com/swift-lco/Primitives.git", branch: "master"),
+        .package(url: "https://github.com/swift-lco/Registry.git", branch: "master"),
     ],
     targets: [
         .target(

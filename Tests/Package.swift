@@ -18,7 +18,7 @@ let package = Package(
     ],
 
     dependencies: [
-        // .package(url: "https://github.com/leviouwendijk/Indentation.git", branch: "master"),
+        // .package(url: "https://github.com/swift-lco/Indentation.git", branch: "master"),
         .package(
             url: "https://github.com/swift-tooling/TestFlows.git",
             branch: "master"
